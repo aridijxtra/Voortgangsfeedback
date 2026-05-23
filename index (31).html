@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CoachingEffect – Gedragsmonitor</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --cream:   #faf7f2;
+      --ivory:   #f0ebe0;
+      --dark:    #111009;
+      --warm:    #1e1a14;
+      --accent:  #b85a28;
+      --muted:   #5a5248;
+      --card:    #ffffff;
+      --border:  #d4c9b8;
+      --pros:    #2e7d5e;
+      --cons:    #b83a28;
+      --support: #2e5c9e;
+      --self:    #8c6020;
+      --r: 12px;
+      --shadow: 0 4px 24px rgba(26,23,20,.10);
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--cream);
+      color: var(--dark);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    .app { max-width: 780px; margin: 0 auto; padding: 0 20px 80px; }
+
+    header { text-align: center; padding: 48px 0 32px; }
+    header::after { content:''; display:block; width:60px; height:3px; background:var(--accent); margin:18px auto 0; border-radius:2px; }
+    .logo { font-family:'Playfair Display',serif; font-size:clamp(2rem,5vw,2.8rem); color:var(--dark); letter-spacing:-.02em; }
+    .logo span { color:var(--accent); }
+    .tagline { font-size:.9rem; color:var(--muted); margin-top:6px; font-weight:500; letter-spacing:.06em; text-transform:uppercase; }
+
+    /* CARDS */
+    .card { background:var(--card); border-radius:var(--r); box-shadow:var(--shadow); border:1px solid var(--border); padding:32px 36px; margin-bottom:24px; }
+    .card-title { font-family:'Playfair Display',serif; font-size:1.4rem; margin-bottom:16px; color:var(--dark); font-weight:700; }
+    .card-intro { font-size:.95rem; color:var(--muted); line-height:1.75; margin-bottom:24px; }
+
+    /* STEPS */
+    .step { display:none; }
+    .step.active { display:block; }
+
+    /* STEP INDICATOR */
+    .step-indicator { display:flex; align-items:center; gap:8px; font-size:.8rem; color:var(--muted); font-weight:600; margin-bottom:20px; }
+    .step-dot { width:9px; height:9px; border-radius:50%; background:var(--border); }
+    .step-dot.done { background:var(--pros); }
+    .step-dot.active { background:var(--accent); }
+
+    /* FORM */
+    label { display:block; font-size:.82rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--warm); margin-bottom:8px; }
+    input[type="text"], input[type="password"] {
+      width:100%; padding:13px 16px;
+      border:2px solid var(--border); border-radius:8px;
+      font-family:'DM Sans',sans-serif; font-size:1rem;
+      background:#fff; color:var(--dark);
+      transition:border-color .2s, box-shadow .2s; outline:none;
+    }
+    input[type="text"]:focus, input[type="password"]:focus {
+      border-color:var(--accent); box-shadow:0 0 0 3px rgba(184,90,40,.15);
+    }
+    .field { margin-bottom:20px; }
+    .field-hint { font-size:.78rem; color:var(--muted); margin-top:6px; line-height:1.5; }
+
+    /* SETUP BOX */
+    .setup-box { background:var(--ivory); border:2px dashed var(--border); border-radius:10px; padding:22px 24px; margin-bottom:22px; }
+    .setup-box h3 { font-size:.92rem; font-weight:700; color:var(--dark); margin-bottom:14px; }
+    .setup-box ol { padding-left:20px; font-size:.9rem; color:var(--warm); line-height:2.1; }
+    .setup-box a { color:var(--accent); }
+
+    /* EXAMPLE CHIPS */
+    .examples { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+    .example-chip {
+      background:var(--ivory); border:1.5px solid var(--border); border-radius:20px;
+      padding:7px 16px; font-size:.82rem; font-weight:600; color:var(--warm);
+      cursor:pointer; transition:background .15s, color .15s; user-select:none;
+    }
+    .example-chip:hover { background:var(--accent); border-color:var(--accent); color:#fff; }
+
+    /* BEHAVIOUR TAG — groot & opvallend */
+    #behaviour-tag {
+      display:block;
+      background:var(--ivory);
+      border-left:4px solid var(--accent);
+      border-radius:0 8px 8px 0;
+      padding:12px 20px;
+      font-size:1.15rem;
+      font-weight:700;
+      color:var(--dark);
+      margin-bottom:24px;
+      line-height:1.4;
+    }
+
+    /* SLIDERS */
+    .scale-group { margin-bottom:30px; padding-bottom:26px; border-bottom:1px solid var(--border); }
+    .scale-group:last-of-type { border-bottom:none; }
+    .scale-question { font-size:1rem; font-weight:600; color:var(--dark); margin-bottom:10px; line-height:1.5; }
+    .scale-labels { display:flex; justify-content:space-between; font-size:.75rem; font-weight:600; color:var(--muted); margin-bottom:8px; }
+    .scale-track { display:flex; gap:10px; align-items:center; }
+    .scale-track input[type=range] {
+      flex:1; -webkit-appearance:none; height:7px; border-radius:4px; outline:none; cursor:pointer;
+    }
+    .scale-track input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance:none; width:24px; height:24px; border-radius:50%;
+      background:var(--accent); box-shadow:0 2px 8px rgba(184,90,40,.4);
+      cursor:pointer; transition:transform .15s;
+    }
+    .scale-track input[type=range]::-webkit-slider-thumb:hover { transform:scale(1.12); }
+    .scale-value { font-family:'Playfair Display',serif; font-size:1.6rem; font-weight:700; min-width:36px; text-align:center; }
+
+    .pros-slider input[type=range] { background:linear-gradient(to right, var(--border), var(--pros)); }
+    .pros-slider .scale-value { color:var(--pros); }
+    .cons-slider input[type=range] { background:linear-gradient(to right, var(--border), var(--cons)); }
+    .cons-slider .scale-value { color:var(--cons); }
+    .self-slider input[type=range] { background:linear-gradient(to right, var(--border), var(--self)); }
+    .self-slider .scale-value { color:var(--self); }
+    .support-slider input[type=range] { background:linear-gradient(to right, var(--border), var(--support)); }
+    .support-slider .scale-value { color:var(--support); }
+
+    /* BUTTONS */
+    .btn {
+      display:inline-flex; align-items:center; gap:8px;
+      padding:13px 28px; border-radius:8px;
+      font-family:'DM Sans',sans-serif; font-size:.95rem; font-weight:700;
+      cursor:pointer; border:none; transition:transform .15s, box-shadow .15s;
+      letter-spacing:.01em;
+    }
+    .btn:active { transform:scale(.97); }
+    .btn-primary { background:var(--accent); color:#fff; box-shadow:0 4px 14px rgba(184,90,40,.35); }
+    .btn-primary:hover { box-shadow:0 6px 20px rgba(184,90,40,.45); }
+    .btn-secondary { background:var(--ivory); color:var(--dark); border:2px solid var(--border); }
+    .btn-secondary:hover { background:var(--border); }
+    .btn-green { background:var(--pros); color:#fff; box-shadow:0 4px 14px rgba(46,125,94,.35); }
+    .btn-green:hover { box-shadow:0 6px 20px rgba(46,125,94,.45); }
+    .btn-pdf { background:var(--support); color:#fff; box-shadow:0 4px 14px rgba(46,92,158,.35); }
+    .btn-pdf:hover { box-shadow:0 6px 20px rgba(46,92,158,.45); }
+    .btn-sm { padding:8px 16px; font-size:.82rem; }
+    .btn-row { display:flex; gap:12px; flex-wrap:wrap; margin-top:24px; }
+
+    /* CHART */
+    #chart-section { display:none; }
+    .chart-header { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:20px; }
+    .chart-meta h2 { font-family:'Playfair Display',serif; font-size:1.35rem; color:var(--dark); font-weight:700; }
+    .chart-meta .client-name { font-size:.88rem; color:var(--muted); font-weight:600; margin-top:3px; }
+
+    /* FIX 1: vaste hoogte zodat grafiek niet krimpt bij hover */
+    #chart-container {
+      position:relative;
+      background:#fff;
+      border-radius:10px;
+      padding:20px 12px 12px;
+      border:1px solid var(--border);
+      height:340px;   /* vaste hoogte */
+    }
+    #myChart { width:100% !important; height:100% !important; }
+
+    .legend { display:flex; gap:20px; flex-wrap:wrap; margin-top:16px; padding:14px 18px; background:var(--ivory); border-radius:8px; border:1px solid var(--border); }
+    .legend-item { display:flex; align-items:center; gap:8px; font-size:.84rem; font-weight:600; color:var(--dark); }
+    .legend-dot { width:13px; height:13px; border-radius:50%; flex-shrink:0; }
+
+    /* TABLE */
+    .data-table-wrapper { overflow-x:auto; border-radius:10px; border:1px solid var(--border); }
+    table { width:100%; border-collapse:collapse; font-size:.88rem; }
+    thead { background:var(--ivory); }
+    th { padding:11px 14px; text-align:left; font-weight:700; color:var(--dark); white-space:nowrap; border-bottom:2px solid var(--border); }
+    td { padding:10px 14px; border-bottom:1px solid var(--border); color:var(--dark); font-weight:500; }
+    tr:last-child td { border-bottom:none; }
+    tr:hover td { background:var(--cream); }
+    .val-pros    { color:var(--pros);    font-weight:700; }
+    .val-cons    { color:var(--cons);    font-weight:700; }
+    .val-self    { color:var(--self);    font-weight:700; }
+    .val-support { color:var(--support); font-weight:700; }
+
+    /* STATUS */
+    .status { margin-top:14px; padding:12px 18px; border-radius:8px; font-size:.9rem; font-weight:600; display:none; }
+    .status.success { background:#d4edda; color:#155724; display:block; }
+    .status.error   { background:#f8d7da; color:#721c24; display:block; }
+    .status.info    { background:#cce5ff; color:#004085; display:block; }
+
+    /* DB BADGE */
+    .db-badge {
+      display:inline-flex; align-items:center; gap:6px;
+      background:#fff; border:1.5px solid var(--border);
+      border-radius:20px; padding:5px 14px;
+      font-size:.75rem; font-weight:600; color:var(--muted);
+      position:fixed; bottom:16px; right:16px;
+      cursor:pointer; transition:background .15s; z-index:100;
+    }
+    .db-badge:hover { background:var(--ivory); }
+    .db-badge .dot { width:8px; height:8px; border-radius:50%; background:#bbb; }
+    .db-badge .dot.connected { background:var(--pros); }
+
+    @media (max-width:520px) {
+      .card { padding:22px 18px; }
+      .btn { padding:11px 18px; font-size:.88rem; }
+      #chart-container { height:260px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="logo">Coaching<span>Effect</span></div>
+    <div class="tagline">Gedragsmonitor voor leefstijlcoaching</div>
+  </header>
+
+  <!-- ══ STAP 0 — SETUP ══ -->
+  <div id="step0" class="step active">
+    <div class="card">
+      <h2 class="card-title">⚙️ Eenmalige instelling</h2>
+      <p class="card-intro">Verbind de app met jouw Supabase database. Dit hoef je maar één keer te doen — de instellingen worden opgeslagen in je browser.</p>
+
+      <div class="setup-box">
+        <h3>📋 Stap 1 — Maak een gratis Supabase project</h3>
+        <ol>
+          <li>Ga naar <a href="https://supabase.com" target="_blank">supabase.com</a> → <strong>Start your project</strong></li>
+          <li>Maak een nieuw project (kies een Europese regio)</li>
+          <li>Ga naar <strong>Project Settings → API</strong></li>
+          <li>Kopieer de <strong>Project URL</strong> en de <strong>anon / public key</strong></li>
+        </ol>
+      </div>
+
+      <div class="setup-box">
+        <h3>🗄️ Stap 2 — Maak de tabel aan in SQL Editor</h3>
+        <div style="position:relative; margin-top:10px;">
+          <pre id="sql-block" style="background:#111009; color:#a8e6c0; font-size:.76rem; border-radius:8px; padding:16px 16px 16px 16px; overflow-x:auto; line-height:1.7; font-family:monospace; white-space:pre">create table if not exists measurements (
+  id           bigserial primary key,
+  name         text not null,
+  behaviour    text not null,
+  pros         smallint not null,
+  cons         smallint not null,
+  self_eff     smallint not null,
+  support      smallint not null,
+  measured_at  timestamptz not null default now()
+);
+alter table measurements enable row level security;
+create policy "insert_open" on measurements
+  for insert with check (true);
+create policy "select_open" on measurements
+  for select using (true);</pre>
+          <button class="btn btn-secondary btn-sm" onclick="copySQL()" id="copy-btn" style="position:absolute;top:10px;right:10px;font-size:.72rem;padding:6px 14px;">Kopieer</button>
+        </div>
+        <p style="font-size:.84rem;color:var(--muted);margin-top:10px;font-weight:600;">Klik daarna op <strong style="color:var(--dark)">Run</strong> in Supabase.</p>
+      </div>
+
+      <div class="setup-box">
+        <h3>🔑 Stap 3 — Vul je gegevens in</h3>
+        <div class="field">
+          <label for="cfg-url">Supabase Project URL</label>
+          <input type="text" id="cfg-url" placeholder="https://xxxxxxxxxxx.supabase.co" />
+          <div class="field-hint">Project Settings → API → Project URL</div>
+        </div>
+        <div class="field">
+          <label for="cfg-key">Supabase Anon / Public Key</label>
+          <input type="password" id="cfg-key" placeholder="eyJhbGciOiJIUzI1NiIs..." />
+          <div class="field-hint">Project Settings → API → anon public</div>
+        </div>
+      </div>
+
+      <div id="setup-status" class="status"></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="saveConfig()">Verbinding testen & opslaan →</button>
+        <button class="btn btn-secondary" onclick="skipSetup()">Overslaan (lokale modus)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ STAP 1 — NAAM ══ -->
+  <div id="step1" class="step">
+    <div class="card">
+      <div class="step-indicator">
+        <div class="step-dot done"></div><div class="step-dot active"></div><div class="step-dot"></div><div class="step-dot"></div>
+        <span>Stap 1 van 3</span>
+      </div>
+      <h2 class="card-title">Welkom bij CoachingEffect</h2>
+      <p class="card-intro">
+        Deze app helpt jou en je coach inzicht te krijgen in hoe jouw motivatie en zelfvertrouwen
+        zich ontwikkelen rondom een specifiek gedrag. Je kunt zo vaak meten als je wilt — dagelijks of vaker.
+        De resultaten worden in een grafiek weergegeven die je kunt downloaden als PDF.
+      </p>
+      <div class="field">
+        <label for="input-name">Wat is jouw naam?</label>
+        <input type="text" id="input-name" placeholder="Bijv. Lisa" maxlength="50" />
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="goStep2()">Verder →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ STAP 2 — GEDRAG ══ -->
+  <div id="step2" class="step">
+    <div class="card">
+      <div class="step-indicator">
+        <div class="step-dot done"></div><div class="step-dot done"></div><div class="step-dot active"></div><div class="step-dot"></div>
+        <span>Stap 2 van 3</span>
+      </div>
+      <h2 class="card-title" id="step2-title">Wat ga jij doen?</h2>
+      <p class="card-intro">Beschrijf zo concreet mogelijk welk gedrag je wilt monitoren — wat, hoe vaak, wanneer.</p>
+      <div class="field">
+        <label for="input-behaviour">Jouw gedrag</label>
+        <input type="text" id="input-behaviour" placeholder="Beschrijf jouw gedrag hier..." maxlength="120" />
+        <div class="examples">
+          <span class="example-chip" onclick="fillBehaviour('3× per week 30 min wandelen')">3× per week 30 min wandelen</span>
+          <span class="example-chip" onclick="fillBehaviour('Minder vet eten door de week')">Minder vet eten door de week</span>
+          <span class="example-chip" onclick="fillBehaviour('Geen alcohol door de week')">Geen alcohol door de week</span>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="goStep1()">← Terug</button>
+        <button class="btn btn-primary" onclick="goStep3()">Verder →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ STAP 3 — SCHALEN ══ -->
+  <div id="step3" class="step">
+    <div class="card">
+      <div class="step-indicator">
+        <div class="step-dot done"></div><div class="step-dot done"></div><div class="step-dot done"></div><div class="step-dot active"></div>
+        <span>Stap 3 van 3</span>
+      </div>
+      <h2 class="card-title">Hoe voel jij je nu?</h2>
+
+      <!-- FIX 4: gedrag in grote, opvallende letters -->
+      <div id="behaviour-tag"></div>
+
+      <div class="scale-group pros-slider">
+        <div class="scale-question">Hoe groot zijn de <strong>positieve effecten</strong> van dit gedrag?</div>
+        <div class="scale-labels"><span>Geen positieve effecten</span><span>Heel sterke positieve effecten</span></div>
+        <div class="scale-track">
+          <input type="range" id="s-pros" min="1" max="7" value="4" oninput="updateSlider('pros',this.value)" />
+          <div class="scale-value" id="v-pros">4</div>
+        </div>
+      </div>
+
+      <div class="scale-group cons-slider">
+        <div class="scale-question">Hoe groot zijn de <strong>nadelen en investeringen</strong> van dit gedrag?</div>
+        <div class="scale-labels"><span>Geen nadelen / investeringen</span><span>Heel sterke nadelen / investeringen</span></div>
+        <div class="scale-track">
+          <input type="range" id="s-cons" min="1" max="7" value="4" oninput="updateSlider('cons',this.value)" />
+          <div class="scale-value" id="v-cons">4</div>
+        </div>
+      </div>
+
+      <div class="scale-group self-slider">
+        <div class="scale-question">Hoe <strong>gemakkelijk</strong> vind je het om dit gedrag vol te houden?</div>
+        <div class="scale-labels"><span>Heel erg moeilijk</span><span>Heel gemakkelijk</span></div>
+        <div class="scale-track">
+          <input type="range" id="s-self" min="1" max="7" value="4" oninput="updateSlider('self',this.value)" />
+          <div class="scale-value" id="v-self">4</div>
+        </div>
+      </div>
+
+      <div class="scale-group support-slider">
+        <div class="scale-question">Hoe sterk voel je je <strong>gesteund door anderen</strong>?</div>
+        <div class="scale-labels"><span>Geen steun</span><span>Heel veel steun</span></div>
+        <div class="scale-track">
+          <input type="range" id="s-support" min="1" max="7" value="4" oninput="updateSlider('support',this.value)" />
+          <div class="scale-value" id="v-support">4</div>
+        </div>
+      </div>
+
+      <div id="save-status" class="status"></div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="goStep2()">← Terug</button>
+        <button class="btn btn-green" onclick="saveMeasurement()">✓ Meting opslaan</button>
+        <button class="btn btn-secondary" onclick="showChart()">Bekijk grafiek →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ GRAFIEK ══ -->
+  <div id="chart-section">
+    <div class="card">
+      <div class="chart-header">
+        <div class="chart-meta">
+          <h2 id="chart-title">Verloop in de tijd</h2>
+          <div class="client-name" id="chart-subtitle"></div>
+        </div>
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn btn-secondary btn-sm" onclick="goStep3()">+ Nieuwe meting</button>
+          <button class="btn btn-pdf btn-sm" onclick="downloadPDF()">↓ PDF downloaden</button>
+        </div>
+      </div>
+      <div id="chart-container">
+        <canvas id="myChart"></canvas>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--pros)"></div><span>Positieve effecten</span></div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--cons)"></div><span>Nadelen / investeringen</span></div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--self)"></div><span>Self-efficacy (gemak)</span></div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--support)"></div><span>Sociale steun</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">Meetgegevens</h2>
+      <div class="data-table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Datum &amp; tijd</th>
+              <th style="color:var(--pros)">Voordelen</th>
+              <th style="color:var(--cons)">Nadelen</th>
+              <th style="color:var(--self)">Self-efficacy</th>
+              <th style="color:var(--support)">Sociale steun</th>
+            </tr>
+          </thead>
+          <tbody id="data-table-body">
+            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">Geen metingen beschikbaar</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="db-badge" onclick="resetConfig()" title="Klik om database-instelling te wijzigen">
+  <div class="dot" id="db-dot"></div>
+  <span id="db-label">Niet verbonden</span>
+</div>
+
+<script>
+/* ── STATE ──────────────────────────────────────────── */
+let db = null, userName = '', userBehaviour = '', chartInstance = null, isConnected = false;
+
+// FIX 3: lokale data opslaan in localStorage zodat het niet verdwijnt bij refresh
+function getLocalData() {
+  try { return JSON.parse(localStorage.getItem('ce_local_data') || '[]'); } catch { return []; }
+}
+function saveLocalData(arr) {
+  localStorage.setItem('ce_local_data', JSON.stringify(arr));
+}
+
+/* ── INIT ───────────────────────────────────────────── */
+(function init() {
+  const url = localStorage.getItem('ce_supabase_url') || 'https://yyuzfqrkfbxbssnuszgf.supabase.co';
+  const key = localStorage.getItem('ce_supabase_key') || 'sb_publishable_xkinJOG6N1nWRb7JevmpJw_ZCt5_Buk';
+  try {
+    db = supabase.createClient(url, key);
+    isConnected = true;
+    updateDbBadge(true);
+    showStep(1);
+  } catch(e) { showStep(0); }
+
+  // Herstel naam en gedrag uit localStorage als die er zijn
+  const savedName = localStorage.getItem('ce_name');
+  const savedBehaviour = localStorage.getItem('ce_behaviour');
+  if (savedName) { document.getElementById('input-name').value = savedName; }
+  if (savedBehaviour) { document.getElementById('input-behaviour').value = savedBehaviour; }
+})();
+
+/* ── SLIDER UPDATE (FIX 2: schuifbalk update ook de gradient) ── */
+function updateSlider(id, val) {
+  document.getElementById('v-' + id).textContent = val;
+  const input = document.getElementById('s-' + id);
+  const pct = ((val - 1) / 6) * 100;
+  // kleur per dimensie
+  const colors = { pros:'#2e7d5e', cons:'#b83a28', self:'#8c6020', support:'#2e5c9e' };
+  const c = colors[id] || '#b85a28';
+  input.style.background = `linear-gradient(to right, ${c} ${pct}%, #d4c9b8 ${pct}%)`;
+}
+
+// Init sliders op juiste kleur bij laden
+window.addEventListener('DOMContentLoaded', () => {
+  ['pros','cons','self','support'].forEach(id => {
+    const el = document.getElementById('s-' + id);
+    if (el) updateSlider(id, el.value);
+  });
+});
+
+/* ── SETUP ──────────────────────────────────────────── */
+async function saveConfig() {
+  const url = document.getElementById('cfg-url').value.trim();
+  const key = document.getElementById('cfg-key').value.trim();
+  const st  = document.getElementById('setup-status');
+
+  if (!url.startsWith('https://')) { st.textContent = 'Voer een geldige Supabase URL in (begint met https://)'; st.className='status error'; return; }
+  if (!key.startsWith('eyJ') && !key.startsWith('sb_')) { st.textContent = 'Voer een geldige key in'; st.className='status error'; return; }
+
+  st.textContent = 'Verbinding testen…'; st.className='status info';
+  try {
+    const testClient = supabase.createClient(url, key);
+    const { error } = await testClient.from('measurements').select('id').limit(1);
+    if (error && error.code === '42P01') {
+      st.textContent = '⚠️ Verbinding OK, maar de tabel bestaat nog niet. Voer de SQL uit in Supabase.';
+      st.className='status error'; return;
+    }
+    localStorage.setItem('ce_supabase_url', url);
+    localStorage.setItem('ce_supabase_key', key);
+    db = testClient; isConnected = true; updateDbBadge(true);
+    st.textContent = '✓ Verbinding geslaagd!'; st.className='status success';
+    setTimeout(() => showStep(1), 1000);
+  } catch(e) { st.textContent = 'Kon geen verbinding maken: '+e.message; st.className='status error'; }
+}
+
+function skipSetup() { isConnected=false; updateDbBadge(false); showStep(1); }
+
+function resetConfig() {
+  if (!confirm('Database-instelling wissen en opnieuw instellen?')) return;
+  localStorage.removeItem('ce_supabase_url'); localStorage.removeItem('ce_supabase_key');
+  db=null; isConnected=false; updateDbBadge(false); showStep(0);
+}
+
+function updateDbBadge(ok) {
+  document.getElementById('db-dot').className = 'dot'+(ok?' connected':'');
+  document.getElementById('db-label').textContent = ok ? 'Supabase verbonden' : 'Lokale modus';
+}
+
+function copySQL() {
+  navigator.clipboard.writeText(document.getElementById('sql-block').textContent).then(() => {
+    const b=document.getElementById('copy-btn'); b.textContent='✓ Gekopieerd!';
+    setTimeout(()=>b.textContent='Kopieer', 2000);
+  });
+}
+
+/* ── NAVIGATIE ──────────────────────────────────────── */
+function showStep(n) {
+  document.querySelectorAll('.step').forEach(s=>s.classList.remove('active'));
+  document.getElementById('step'+n).classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function goStep1() { showStep(1); }
+function goStep2() {
+  userName = document.getElementById('input-name').value.trim();
+  if (!userName) { alert('Vul eerst je naam in.'); return; }
+  localStorage.setItem('ce_name', userName);
+  document.getElementById('step2-title').textContent = 'Hoi '+userName+', wat ga jij doen?';
+  showStep(2);
+}
+function goStep3() {
+  userBehaviour = document.getElementById('input-behaviour').value.trim();
+  if (!userBehaviour) { alert('Beschrijf eerst het gedrag dat je wilt monitoren.'); return; }
+  localStorage.setItem('ce_behaviour', userBehaviour);
+  document.getElementById('behaviour-tag').textContent = '📌 ' + userBehaviour;
+  clearStatus();
+  // Reset sliders naar 4
+  ['pros','cons','self','support'].forEach(id => {
+    document.getElementById('s-'+id).value = 4;
+    updateSlider(id, 4);
+  });
+  showStep(3);
+}
+function fillBehaviour(text) { document.getElementById('input-behaviour').value=text; }
+
+/* ── METING OPSLAAN ─────────────────────────────────── */
+async function saveMeasurement() {
+  const record = {
+    name:        userName,
+    behaviour:   userBehaviour,
+    pros:        parseInt(document.getElementById('s-pros').value),
+    cons:        parseInt(document.getElementById('s-cons').value),
+    self_eff:    parseInt(document.getElementById('s-self').value),
+    support:     parseInt(document.getElementById('s-support').value),
+    measured_at: new Date().toISOString()
+  };
+
+  if (isConnected && db) {
+    const { error } = await db.from('measurements').insert(record);
+    if (error) { showStatus('Fout bij opslaan: '+error.message, 'error'); return; }
+  } else {
+    // FIX 3: sla op in localStorage
+    const local = getLocalData();
+    local.push(record);
+    saveLocalData(local);
+  }
+  showStatus('✓ Meting opgeslagen op '+formatDateTime(record.measured_at), 'success');
+}
+
+/* ── GRAFIEK ────────────────────────────────────────── */
+async function showChart() {
+  let rows = [];
+  if (isConnected && db) {
+    const { data, error } = await db.from('measurements').select('*')
+      .eq('name', userName).eq('behaviour', userBehaviour)
+      .order('measured_at', {ascending:true}).limit(30);
+    if (error) { alert('Kon data niet ophalen: '+error.message); return; }
+    rows = data || [];
+  } else {
+    rows = getLocalData().filter(r=>r.name===userName && r.behaviour===userBehaviour);
+  }
+  if (!rows.length) { alert('Nog geen metingen gevonden. Sla eerst een meting op.'); return; }
+
+  document.getElementById('chart-section').style.display='block';
+  document.getElementById('chart-title').textContent = userBehaviour;
+  document.getElementById('chart-subtitle').textContent = 'Metingen van '+userName;
+  buildChart(rows);
+  buildTable(rows);
+  document.getElementById('chart-section').scrollIntoView({behavior:'smooth'});
+}
+
+function buildChart(rows) {
+  const mkDs = (label, key, color) => ({
+    label, borderColor:color, backgroundColor:color+'33',
+    data: rows.map(r=>({x:r.measured_at, y:r[key]})),
+    borderWidth:2.5, pointRadius:5, pointHoverRadius:8,
+    pointBackgroundColor:color, tension:0.35, fill:false
+  });
+  const datasets = [
+    mkDs('Positieve effecten',     'pros',    '#2e7d5e'),
+    mkDs('Nadelen/investeringen',  'cons',    '#b83a28'),
+    mkDs('Self-efficacy',          'self_eff','#8c6020'),
+    mkDs('Sociale steun',          'support', '#2e5c9e'),
+  ];
+  if (chartInstance) chartInstance.destroy();
+  const ctx = document.getElementById('myChart').getContext('2d');
+  chartInstance = new Chart(ctx, {
+    type:'line', data:{datasets},
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,   /* FIX 1: geen krimpen bij hover */
+      interaction:{mode:'index', intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'#111009', titleColor:'#fff', bodyColor:'#e0d8cc',
+          titleFont:{family:'DM Sans',size:13,weight:'bold'},
+          bodyFont:{family:'DM Sans',size:12}, padding:14, cornerRadius:8,
+          callbacks:{title:items=>formatDateTime(items[0].label)}
+        }
+      },
+      scales:{
+        x:{
+          type:'time',
+          time:{tooltipFormat:'dd-MM-yyyy HH:mm', displayFormats:{hour:'dd/MM HH:mm',day:'dd/MM',minute:'dd/MM HH:mm'}},
+          ticks:{maxTicksLimit:10, color:'#5a5248', font:{family:'DM Sans',size:11,weight:'600'}},
+          grid:{color:'#e0d4c0'}
+        },
+        y:{
+          min:0, max:8,
+          ticks:{stepSize:1, color:'#5a5248', font:{family:'DM Sans',size:11,weight:'600'}},
+          grid:{color:'#e0d4c0'}
+        }
+      }
+    }
+  });
+}
+
+function buildTable(rows) {
+  const tbody = document.getElementById('data-table-body');
+  tbody.innerHTML = '';
+  [...rows].reverse().forEach(r=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${formatDateTime(r.measured_at)}</td>
+      <td class="val-pros">${r.pros}</td><td class="val-cons">${r.cons}</td>
+      <td class="val-self">${r.self_eff}</td><td class="val-support">${r.support}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+/* ── PDF DOWNLOAD (FIX 5: mooier ontwerp) ───────────── */
+async function downloadPDF() {
+  const { jsPDF } = window.jspdf;
+
+  // Render grafiek + tabel
+  const chartEl   = document.getElementById('chart-container');
+  const chartCvs  = await html2canvas(chartEl,  { scale:2, backgroundColor:'#ffffff', useCORS:true });
+  const chartImg  = chartCvs.toDataURL('image/png');
+
+  const pdf = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
+  const pw  = pdf.internal.pageSize.getWidth();   // 297
+  const ph  = pdf.internal.pageSize.getHeight();  // 210
+
+  /* — Achtergrond — */
+  pdf.setFillColor(250,247,242);
+  pdf.rect(0,0,pw,ph,'F');
+
+  /* — Zijbalk — */
+  pdf.setFillColor(184,90,40);
+  pdf.rect(0,0,8,ph,'F');
+
+  /* — Header band — */
+  pdf.setFillColor(30,26,20);
+  pdf.rect(8,0,pw-8,42,'F');
+
+  /* — Logo tekst — */
+  pdf.setFont('helvetica','bold');
+  pdf.setFontSize(22);
+  pdf.setTextColor(250,247,242);
+  pdf.text('CoachingEffect',  16, 20);
+  pdf.setFont('helvetica','normal');
+  pdf.setFontSize(10);
+  pdf.setTextColor(160,140,120);
+  pdf.text('GEDRAGSMONITOR — LEEFSTIJLCOACHING', 16, 28);
+
+  /* — Datum rechts in header — */
+  pdf.setFont('helvetica','bold');
+  pdf.setFontSize(9);
+  pdf.setTextColor(200,180,160);
+  const dateStr = formatDateTime(new Date().toISOString());
+  pdf.text(dateStr, pw-12, 20, {align:'right'});
+
+  /* — Cliënt & gedrag info band — */
+  pdf.setFillColor(240,235,224);
+  pdf.rect(8,42,pw-8,22,'F');
+
+  pdf.setFont('helvetica','bold');
+  pdf.setFontSize(10);
+  pdf.setTextColor(90,82,72);
+  pdf.text('CLIËNT', 16, 51);
+  pdf.setFont('helvetica','normal');
+  pdf.setFontSize(12);
+  pdf.setTextColor(30,26,20);
+  pdf.text(userName, 16, 59);
+
+  pdf.setFont('helvetica','bold');
+  pdf.setFontSize(10);
+  pdf.setTextColor(90,82,72);
+  pdf.text('GEDRAG', pw/2, 51);
+  pdf.setFont('helvetica','normal');
+  pdf.setFontSize(11);
+  pdf.setTextColor(30,26,20);
+  const bText = userBehaviour.length > 60 ? userBehaviour.slice(0,57)+'…' : userBehaviour;
+  pdf.text(bText, pw/2, 59);
+
+  /* — Scheidingslijn — */
+  pdf.setDrawColor(200,185,165);
+  pdf.setLineWidth(0.4);
+  pdf.line(16,66,pw-12,66);
+
+  /* — Grafiek — */
+  const chartY = 70;
+  const chartW = pw - 28;
+  const chartH = chartW * (chartCvs.height / chartCvs.width);
+  const maxH   = ph - chartY - 22;
+  const finalH = Math.min(chartH, maxH);
+  pdf.addImage(chartImg,'PNG',16,chartY,chartW,finalH);
+
+  /* — Legenda onder grafiek — */
+  const legY = chartY + finalH + 7;
+  const legItems = [
+    ['#2e7d5e','Positieve effecten'],['#b83a28','Nadelen / investeringen'],
+    ['#8c6020','Self-efficacy'],    ['#2e5c9e','Sociale steun']
+  ];
+  let lx = 16;
+  legItems.forEach(([color,label])=>{
+    const [r,g,b] = hexToRgb(color);
+    pdf.setFillColor(r,g,b);
+    pdf.roundedRect(lx,legY-2.5,5,5,1,1,'F');
+    pdf.setFont('helvetica','bold'); pdf.setFontSize(8); pdf.setTextColor(30,26,20);
+    pdf.text(label, lx+7, legY+1.5);
+    lx += label.length*2+20;
+  });
+
+  /* — Footer — */
+  pdf.setFillColor(30,26,20);
+  pdf.rect(0,ph-8,pw,8,'F');
+  pdf.setFont('helvetica','normal'); pdf.setFontSize(7); pdf.setTextColor(140,120,100);
+  pdf.text('CoachingEffect — Gedragsmonitor voor leefstijlcoaching', 16, ph-3);
+  pdf.text('Vertrouwelijk — uitsluitend bestemd voor coach en cliënt', pw-12, ph-3, {align:'right'});
+
+  pdf.save(`CoachingEffect_${userName.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.pdf`);
+}
+
+/* ── HELPERS ────────────────────────────────────────── */
+function formatDateTime(iso) {
+  try {
+    return new Intl.DateTimeFormat('nl-NL',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(iso));
+  } catch { return iso; }
+}
+function hexToRgb(hex) {
+  return [parseInt(hex.slice(1,3),16),parseInt(hex.slice(3,5),16),parseInt(hex.slice(5,7),16)];
+}
+function showStatus(msg,type) {
+  const el=document.getElementById('save-status'); el.textContent=msg; el.className='status '+type;
+}
+function clearStatus() {
+  const el=document.getElementById('save-status'); el.className='status'; el.textContent='';
+}
+</script>
+</body>
+</html>
